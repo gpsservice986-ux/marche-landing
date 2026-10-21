@@ -782,6 +782,49 @@
       .chat-sidebar { max-height: 150px; border-right: none; border-bottom: 1px solid var(--c-gray-200); }
       .chat-main { height: 340px; }
     }
+
+    /* ================= POINT QUI RESPIRE (PONT EN TEMPS RÉEL APP ↔ SITE) ================= */
+    .live-bridge-strip {
+      max-width: 1240px;
+      margin: 12px auto 0;
+      padding: 0 14px;
+      display: flex;
+      justify-content: center;
+    }
+    .live-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      background: linear-gradient(90deg, #0f3d22 0%, #1A6B3C 100%);
+      color: white;
+      border: 1.5px solid #4ade80;
+      padding: 8px 18px;
+      border-radius: 50px;
+      font-size: 12px;
+      font-weight: 800;
+      box-shadow: 0 4px 14px rgba(26, 107, 60, 0.22);
+      letter-spacing: 0.3px;
+      text-align: center;
+    }
+    .live-dot {
+      width: 10px;
+      height: 10px;
+      background: #4ade80;
+      border-radius: 50%;
+      flex-shrink: 0;
+      box-shadow: 0 0 0 5px rgba(74, 222, 128, 0.32), 0 0 12px #4ade80;
+      animation: pulseRays 1.6s infinite ease-in-out;
+    }
+    @keyframes pulseRays {
+      0%, 100% {
+        transform: scale(1);
+        box-shadow: 0 0 0 3px rgba(74, 222, 128, 0.45), 0 0 10px #4ade80;
+      }
+      50% {
+        transform: scale(1.35);
+        box-shadow: 0 0 0 9px rgba(74, 222, 128, 0.12), 0 0 20px #4ade80;
+      }
+    }
   </style>
 </head>
 <body>
@@ -808,6 +851,14 @@
       </div>
     </div>
   </header>
+
+  <!-- ================= INDICATEUR LUMINEUX QUI RESPIRE : PONT APP ↔ SITE EN TEMPS RÉEL ================= -->
+  <div class="live-bridge-strip">
+    <div class="live-pill">
+      <span class="live-dot"></span>
+      <span>SYNCHRONISÉ EN TEMPS RÉEL AVEC L'APPLICATION MOBILE</span>
+    </div>
+  </div>
 
   <!-- ================= BARRE DE RECHERCHE ================= -->
   <div class="search-bar-wrap">
@@ -985,6 +1036,35 @@
   <div id="shop-modal" class="modal-overlay" onclick="closeModal('shop-modal')">
     <div class="modal-card wide" style="max-width:900px; padding:0; overflow:hidden; background:#FDF6EC;" onclick="event.stopPropagation()">
       <div id="shop-modal-content"></div>
+    </div>
+  </div>
+
+  <!-- ================= MODAL AFFICHE DU PRODUIT + PARTAGE AVEC LIEN ================= -->
+  <div id="poster-share-modal" class="modal-overlay" onclick="closeModal('poster-share-modal')">
+    <div class="modal-card" style="max-width:440px; padding:0; overflow:hidden;" onclick="event.stopPropagation()">
+      <div class="modal-header">
+        <h3>🖼️ Affiche du produit & Lien direct</h3>
+        <button class="modal-close" onclick="closeModal('poster-share-modal')">✕</button>
+      </div>
+      <div class="modal-body" style="text-align:center;">
+        <p style="font-size:12px; color:#475569; margin-bottom:10px;">
+          Voici l'affiche officielle générée pour ce produit, accompagnée de son lien direct vers le marché :
+        </p>
+        <img id="poster-preview-img" src="" alt="Affiche du produit" style="width:100%; max-height:360px; object-fit:contain; border-radius:12px; border:2px solid #1A6B3C; margin-bottom:14px; background:#f8fafc;" />
+        <div style="display:flex; flex-direction:column; gap:8px;">
+          <button id="poster-native-share-btn" class="btn btn-green" style="width:100%; padding:12px; font-size:14px;">
+            📲 Partager l'Affiche + Lien direct
+          </button>
+          <div style="display:flex; gap:8px;">
+            <button id="poster-wa-share-btn" class="btn" style="flex:1; background:#25D366; color:white; padding:10px; font-size:12px;">
+              💬 WhatsApp (Lien)
+            </button>
+            <button id="poster-download-btn" class="btn btn-outline" style="flex:1; padding:10px; font-size:12px;">
+              📥 Télécharger l'Affiche
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -1717,7 +1797,7 @@
       }
     }
 
-    // ================= ACTIONS SUR LES CARTES : WHATSAPP, PARTAGER, CŒUR =================
+    // ================= ACTIONS SUR LES CARTES : WHATSAPP, PARTAGER (AFFICHE + LIEN), CŒUR =================
     function openWhatsAppForProduct(productId) {
       const p = allProducts.find(item => String(item.id) === String(productId));
       if (!p) return;
@@ -1726,7 +1806,8 @@
         alert("Ce vendeur n'a pas encore renseigné de numéro WhatsApp. Utilisez le bouton « 💬 Discuter » pour lui écrire directement dans l'application !");
         return;
       }
-      const text = `Bonjour ${p.vendorName || ''}, je suis intéressé par votre produit "${p.name}" (${Number(p.price || 0).toLocaleString()} FCFA) vu sur Marché d'Aujourd'hui.`;
+      const prodUrl = `${window.location.origin}${window.location.pathname}?product=${p.id}`;
+      const text = `🔗 Cliquez ici pour voir le produit sur le marché :\n${prodUrl}\n\nBonjour ${p.vendorName || ''}, je suis intéressé par votre produit "${p.name}" (${Number(p.price || 0).toLocaleString()} FCFA) vu sur Marché d'Aujourd'hui. Est-il disponible ?`;
       window.open(`https://wa.me/${waPhone}?text=${encodeURIComponent(text)}`, '_blank');
     }
 
@@ -1739,17 +1820,150 @@
       window.location.href = `tel:${p.vendorPhone.replace(/\s+/g, '')}`;
     }
 
-    function shareProductWeb(productId) {
+    function buildProductPosterWeb(p) {
+      return new Promise((resolve) => {
+        const canvas = document.createElement('canvas');
+        canvas.width = 600;
+        canvas.height = 720;
+        const ctx = canvas.getContext('2d');
+
+        const drawFooter = () => {
+          const gradient = ctx.createLinearGradient(0, 400, 0, 540);
+          gradient.addColorStop(0, 'rgba(0,0,0,0)');
+          gradient.addColorStop(1, 'rgba(0,0,0,0.82)');
+          ctx.fillStyle = gradient;
+          ctx.fillRect(0, 400, 600, 140);
+
+          ctx.fillStyle = '#FFCC00';
+          ctx.font = 'bold 36px Arial';
+          ctx.textAlign = 'center';
+          ctx.fillText(`💰 ${Number(p.price || 0).toLocaleString('fr-FR')} FCFA`, 300, 512);
+
+          ctx.fillStyle = '#1A6B3C';
+          ctx.fillRect(0, 540, 600, 180);
+
+          const name = (p.name && p.name.length > 34) ? p.name.substring(0, 34) + '...' : (p.name || 'Produit');
+          ctx.fillStyle = '#ffffff';
+          ctx.font = 'bold 24px Arial';
+          ctx.fillText(`🛍️ ${name}`, 300, 582);
+
+          ctx.font = 'bold 16px Arial';
+          ctx.fillStyle = '#a7f3d0';
+          ctx.fillText(`🏪 ${p.vendorName || 'Boutique'} • 📍 ${p.city || 'Parakou'}`, 300, 614);
+
+          ctx.font = 'bold 14px Arial';
+          ctx.fillStyle = '#FFCC00';
+          ctx.fillText('🔗 https://marche.benin-connect.com', 300, 650);
+
+          ctx.font = '13px Arial';
+          ctx.fillStyle = '#ffffff';
+          ctx.fillText('👆 Cliquez sur le lien du message pour voir ce produit en direct !', 300, 684);
+
+          const dataUrl = canvas.toDataURL('image/png');
+          canvas.toBlob((blob) => resolve({ dataUrl, blob }), 'image/png');
+        };
+
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, 600, 720);
+
+        ctx.fillStyle = '#1A6B3C';
+        ctx.fillRect(0, 0, 600, 80);
+
+        ctx.fillStyle = '#ffffff';
+        ctx.font = 'bold 26px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText("🛒 MARCHÉ D'AUJOURD'HUI", 300, 36);
+
+        ctx.font = 'bold 14px Arial';
+        ctx.fillStyle = '#a7f3d0';
+        ctx.fillText('🔗 Marché Bénin Connect • En direct', 300, 62);
+
+        const img = new Image();
+        img.crossOrigin = 'anonymous';
+        img.src = (p.images && p.images[0]) ? p.images[0] : 'https://images.unsplash.com/photo-1542838132-92c53300491e?w=600';
+
+        img.onload = () => {
+          ctx.drawImage(img, 0, 80, 600, 460);
+          drawFooter();
+        };
+
+        img.onerror = () => {
+          ctx.fillStyle = '#f0fdf4';
+          ctx.fillRect(0, 80, 600, 460);
+          ctx.fillStyle = '#1A6B3C';
+          ctx.font = 'bold 54px Arial';
+          ctx.textAlign = 'center';
+          ctx.fillText('🛍️', 300, 290);
+          ctx.font = 'bold 24px Arial';
+          ctx.fillText(p.name || 'Produit', 300, 350);
+          drawFooter();
+        };
+      });
+    }
+
+    async function shareProductWeb(productId) {
       const p = allProducts.find(item => String(item.id) === String(productId));
       if (!p) return;
       const shareUrl = `${window.location.origin}${window.location.pathname}?product=${p.id}`;
-      const shareText = `🛍️ Découvrez "${p.name}" à ${Number(p.price || 0).toLocaleString()} FCFA sur Marché d'Aujourd'hui : ${shareUrl}`;
-      if (navigator.share) {
-        navigator.share({ title: p.name, text: shareText, url: shareUrl }).catch(() => {});
-      } else {
-        navigator.clipboard?.writeText(shareUrl);
-        alert('🔗 Lien du produit copié : ' + shareUrl);
+      const shareText = `🔗 Cliquez ici pour voir ce produit sur le marché :\n${shareUrl}\n\n🛍️ Découvrez "${p.name}" à ${Number(p.price || 0).toLocaleString('fr-FR')} FCFA (${p.vendorName || 'Boutique'} - ${p.city || 'Parakou'}) sur Marché d'Aujourd'hui !`;
+      const fileName = `affiche-${(p.name || 'produit').replace(/[^a-zA-Z0-9]/g, '-').toLowerCase()}.png`;
+
+      const { dataUrl, blob } = await buildProductPosterWeb(p);
+
+      // Afficher l'affiche dans la fenêtre dédiée
+      const previewImg = document.getElementById('poster-preview-img');
+      if (previewImg && dataUrl) previewImg.src = dataUrl;
+
+      const nativeBtn = document.getElementById('poster-native-share-btn');
+      if (nativeBtn) {
+        nativeBtn.onclick = async () => {
+          try {
+            if (blob && navigator.canShare) {
+              const file = new File([blob], fileName, { type: 'image/png' });
+              if (navigator.canShare({ files: [file] })) {
+                await navigator.share({ files: [file], title: p.name, text: shareText, url: shareUrl });
+                return;
+              }
+            }
+            if (navigator.share) {
+              await navigator.share({ title: p.name, text: shareText, url: shareUrl });
+            } else {
+              navigator.clipboard?.writeText(shareText);
+              alert('🔗 Lien et texte copiés !');
+            }
+          } catch (e) {}
+        };
       }
+
+      const waBtn = document.getElementById('poster-wa-share-btn');
+      if (waBtn) {
+        waBtn.onclick = () => {
+          window.open(`https://wa.me/?text=${encodeURIComponent(shareText)}`, '_blank');
+        };
+      }
+
+      const dlBtn = document.getElementById('poster-download-btn');
+      if (dlBtn) {
+        dlBtn.onclick = () => {
+          if (!dataUrl) return;
+          const a = document.createElement('a');
+          a.download = fileName;
+          a.href = dataUrl;
+          a.click();
+        };
+      }
+
+      document.getElementById('poster-share-modal').classList.add('open');
+
+      // Sur mobile, déclencher aussi immédiatement le menu de partage avec l'affiche + le lien
+      try {
+        if (blob && navigator.canShare) {
+          const file = new File([blob], fileName, { type: 'image/png' });
+          if (navigator.canShare({ files: [file] })) {
+            await navigator.share({ files: [file], title: p.name, text: shareText, url: shareUrl });
+          }
+        }
+      } catch (e) {}
     }
 
     async function toggleFavoriteWeb(productId) {
