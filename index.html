@@ -1,6 +1,24 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
+  <!-- Google tag (gtag.js) — Bénin Connect / Marché d'Aujourd'hui -->
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-GD8BWE9155"></script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    gtag('js', new Date());
+    gtag('config', 'G-GD8BWE9155', {
+      page_title: "Marché d'Aujourd'hui — Bénin Connect",
+      page_location: window.location.href
+    });
+    function trackGAEvent(eventName, params = {}) {
+      try {
+        if (typeof window.gtag === 'function') {
+          window.gtag('event', eventName, params);
+        }
+      } catch (e) {}
+    }
+  </script>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
@@ -1801,6 +1819,7 @@
     function openWhatsAppForProduct(productId) {
       const p = allProducts.find(item => String(item.id) === String(productId));
       if (!p) return;
+      trackGAEvent('contact_whatsapp', { item_id: p.id, item_name: p.name, vendor_name: p.vendorName, value: Number(p.price || 0) });
       const waPhone = formatWhatsAppPhone(p.vendorPhone);
       if (!waPhone) {
         alert("Ce vendeur n'a pas encore renseigné de numéro WhatsApp. Utilisez le bouton « 💬 Discuter » pour lui écrire directement dans l'application !");
@@ -1817,6 +1836,7 @@
         alert("Ce vendeur n'a pas encore renseigné de numéro d'appel.");
         return;
       }
+      trackGAEvent('call_vendor', { item_id: p.id, item_name: p.name, vendor_name: p.vendorName });
       window.location.href = `tel:${p.vendorPhone.replace(/\s+/g, '')}`;
     }
 
@@ -1904,6 +1924,7 @@
     async function shareProductWeb(productId) {
       const p = allProducts.find(item => String(item.id) === String(productId));
       if (!p) return;
+      trackGAEvent('share', { method: 'poster_link', content_type: 'product', item_id: p.id, item_name: p.name });
       const shareUrl = `${window.location.origin}${window.location.pathname}?product=${p.id}`;
       const shareText = `🔗 Cliquez ici pour voir ce produit sur le marché :\n${shareUrl}\n\n🛍️ Découvrez "${p.name}" à ${Number(p.price || 0).toLocaleString('fr-FR')} FCFA (${p.vendorName || 'Boutique'} - ${p.city || 'Parakou'}) sur Marché d'Aujourd'hui !`;
       const fileName = `affiche-${(p.name || 'produit').replace(/[^a-zA-Z0-9]/g, '-').toLowerCase()}.png`;
@@ -1992,6 +2013,9 @@
       const p = allProducts.find(item => String(item.id) === String(productId));
       if (!p) return;
       activeProductModalId = p.id;
+      if (selectedImgIndex === 0) {
+        trackGAEvent('view_item', { item_id: p.id, item_name: p.name, vendor_name: p.vendorName, value: Number(p.price || 0), currency: 'XOF' });
+      }
 
       const imgs = (Array.isArray(p.images) && p.images.length > 0)
         ? p.images
