@@ -859,6 +859,9 @@
       </a>
 
       <div class="nav-actions">
+        <button class="btn" style="background:#FFCC00; color:#111827; font-weight:800; border:none; box-shadow:0 3px 10px rgba(0,0,0,0.2);" onclick="openInstallAppModal()">
+          📲 Télécharger l'App
+        </button>
         <button class="btn btn-header-pill" onclick="openMessagesCenter()">
           💬 Messages <span id="nav-unread-badge" class="badge-count" style="display:none">0</span>
         </button>
@@ -870,11 +873,30 @@
     </div>
   </header>
 
-  <!-- ================= INDICATEUR LUMINEUX QUI RESPIRE : PONT APP ↔ SITE EN TEMPS RÉEL ================= -->
-  <div class="live-bridge-strip">
+  <!-- ================= INDICATEUR LUMINEUX QUI RESPIRE + BANNIÈRE TÉLÉCHARGEMENT APP MOBILE ================= -->
+  <div class="live-bridge-strip" style="flex-direction:column; align-items:center; gap:10px;">
     <div class="live-pill">
       <span class="live-dot"></span>
       <span>SYNCHRONISÉ EN TEMPS RÉEL AVEC L'APPLICATION MOBILE</span>
+    </div>
+
+    <div onclick="openInstallAppModal()" style="width:100%; max-width:920px; background:linear-gradient(135deg, #0f3d22 0%, #1A6B3C 100%); color:white; border:2px solid #FFCC00; border-radius:16px; padding:12px 18px; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px; cursor:pointer; box-shadow:0 6px 20px rgba(26,107,60,0.25);">
+      <div style="display:flex; align-items:center; gap:12px;">
+        <div style="width:42px; height:42px; border-radius:12px; background:#FFCC00; color:#111; display:flex; align-items:center; justify-content:center; font-size:22px; font-weight:900; flex-shrink:0;">
+          📲
+        </div>
+        <div>
+          <div style="font-weight:900; font-size:14px; color:#fff;">
+            Téléchargez l'Application Mobile « Marché d'Aujourd'hui »
+          </div>
+          <div style="font-size:12px; color:#d1fae5;">
+            Installation directe et gratuite sur votre téléphone (Fichier Android .APK & iPhone — Sans Play Store)
+          </div>
+        </div>
+      </div>
+      <button type="button" class="btn" style="background:#FFCC00; color:#111827; font-weight:900; padding:10px 18px; border-radius:50px; border:none; font-size:13px;">
+        📥 Télécharger & Installer →
+      </button>
     </div>
   </div>
 
@@ -950,13 +972,18 @@
     <!-- ================= FONCTIONS DU BAS : ESPACE VENDEUR & STATISTIQUES EN DIRECT ================= -->
     <section class="bottom-bridge-bar">
       <div>
-        <h3 style="font-size:18px; font-weight:900; margin-bottom:6px;">🏪 Espace Vendeur & Statistiques en direct</h3>
+        <h3 style="font-size:18px; font-weight:900; margin-bottom:6px;">🏪 Espace Vendeur & Application Mobile</h3>
         <p style="font-size:13px; color:rgba(255,255,255,0.85); margin-bottom:14px;">
-          Vous êtes vendeur sur Marché d'Aujourd'hui ? Connectez-vous pour gérer vos produits et vos boosts.
+          Vous êtes vendeur ou acheteur sur Marché d'Aujourd'hui ? Connectez-vous ou installez l'application mobile.
         </p>
-        <button class="btn btn-vendor" style="padding:12px 22px; font-size:14px;" onclick="openVendorSpace()">
-          🏪 Accéder à l'Espace Vendeur
-        </button>
+        <div style="display:flex; gap:10px; flex-wrap:wrap;">
+          <button class="btn btn-vendor" style="padding:12px 22px; font-size:14px;" onclick="openVendorSpace()">
+            🏪 Accéder à l'Espace Vendeur
+          </button>
+          <button class="btn" style="padding:12px 22px; font-size:14px; background:#FFCC00; color:#111827; font-weight:800; border:none;" onclick="openInstallAppModal()">
+            📲 Télécharger l'Application (.APK)
+          </button>
+        </div>
       </div>
 
       <div class="bottom-stats">
@@ -2823,6 +2850,75 @@
       }
     }
 
+    // ================= INSTALLATION APPLICATION MOBILE (APK + PWA SANS PLAY STORE) =================
+    let deferredLandingInstallPrompt = null;
+    window.addEventListener('beforeinstallprompt', (e) => {
+      e.preventDefault();
+      deferredLandingInstallPrompt = e;
+    });
+
+    function openInstallAppModal() {
+      document.getElementById('install-app-modal')?.classList.add('open');
+      if (typeof trackGAEvent === 'function') {
+        trackGAEvent('open_install_app_modal');
+      }
+    }
+
+    function downloadAndroidApk() {
+      const guide = document.getElementById('apk-install-steps');
+      if (guide) guide.style.display = 'block';
+      if (typeof trackGAEvent === 'function') {
+        trackGAEvent('download_android_apk');
+      }
+      // Télécharger depuis le serveur principal Render où l'APK officiel est hébergé
+      const apkUrl = 'https://marche-app.onrender.com/marche-aujourdhui.apk';
+      const a = document.createElement('a');
+      a.href = apkUrl;
+      a.setAttribute('download', 'Marche-dAujourdhui.apk');
+      a.target = '_blank';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    }
+
+    async function triggerOneClickWebInstall() {
+      if (deferredLandingInstallPrompt) {
+        deferredLandingInstallPrompt.prompt();
+        const { outcome } = await deferredLandingInstallPrompt.userChoice;
+        if (outcome === 'accepted') {
+          deferredLandingInstallPrompt = null;
+          closeModal('install-app-modal');
+          return;
+        }
+      }
+      const ua = navigator.userAgent || '';
+      const isIOS = /iPad|iPhone|iPod/.test(ua) && !window.MSStream;
+      const guideBox = document.getElementById('pwa-install-steps');
+      if (guideBox) {
+        guideBox.style.display = 'block';
+        if (isIOS) {
+          guideBox.innerHTML = `
+            <div style="font-weight:800; color:#1A6B3C; margin-bottom:6px;">🍎 Sur iPhone / iPad (Safari) :</div>
+            <div>1️⃣ Appuyez sur le bouton <strong>Partager ⬆️</strong> en bas de Safari.</div>
+            <div style="margin-top:4px;">2️⃣ Faites défiler et choisissez <strong>« Sur l'écran d'accueil ➕ »</strong>.</div>
+            <div style="margin-top:4px;">3️⃣ Appuyez sur <strong>« Ajouter »</strong> en haut à droite.</div>
+          `;
+        } else {
+          guideBox.innerHTML = `
+            <div style="font-weight:800; color:#1A6B3C; margin-bottom:6px;">🤖 Sur Android / Navigateur :</div>
+            <div>1️⃣ Appuyez sur les <strong>3 petits points (⋮)</strong> en haut à droite de votre navigateur.</div>
+            <div style="margin-top:4px;">2️⃣ Appuyez sur <strong>« Installer l'application »</strong> ou <strong>« Ajouter à l'écran d'accueil »</strong>.</div>
+            <div style="margin-top:6px;"><a href="https://marche-app.onrender.com" target="_blank" style="color:#1A6B3C; font-weight:800; text-decoration:underline;">👉 Ou cliquez ici pour ouvrir directement l'Application complète</a></div>
+          `;
+        }
+      }
+    }
+
+    function shareAppOnWhatsApp() {
+      const text = "📲 Télécharge et installe gratuitement l'application mobile *Marché d'Aujourd'hui* sur ton téléphone (sans Play Store) :\n👉 Fichier Android (.APK) : https://marche-app.onrender.com/marche-aujourdhui.apk\n👉 Site officiel : " + window.location.origin;
+      window.open('https://wa.me/?text=' + encodeURIComponent(text), '_blank');
+    }
+
     // ================= UTILITAIRES =================
     function closeModal(id) {
       document.getElementById(id)?.classList.remove('open');
@@ -2860,5 +2956,77 @@
       });
     }
   </script>
+
+  <!-- ================= MODAL INSTALLATION APPLICATION MOBILE (SANS PLAY STORE) ================= -->
+  <div id="install-app-modal" class="modal-overlay" onclick="closeModal('install-app-modal')">
+    <div class="modal-card" style="max-width:480px;" onclick="event.stopPropagation()">
+      <div class="modal-header">
+        <h3>📲 Installer l'Application Mobile</h3>
+        <button class="modal-close" onclick="closeModal('install-app-modal')">✕</button>
+      </div>
+      <div class="modal-body">
+        <div style="text-align:center; margin-bottom:16px;">
+          <div style="width:60px; height:60px; border-radius:16px; background:linear-gradient(135deg, #1A6B3C, #0f4c29); color:white; display:flex; align-items:center; justify-content:center; font-size:32px; margin:0 auto 10px;">
+            🛒
+          </div>
+          <h4 style="font-size:18px; font-weight:900; color:#111827; margin-bottom:4px;">Marché d'Aujourd'hui sur votre téléphone</h4>
+          <p style="font-size:13px; color:#4b5563;">
+            Installez gratuitement l'application mobile officielle sur votre téléphone <strong>sans passer par Play Store</strong>.
+          </p>
+        </div>
+
+        <!-- OPTION 1 : FICHIER ANDROID APK OFFICIEL -->
+        <div style="background:#fffbeb; border:2px solid #F59E0B; border-radius:16px; padding:16px; margin-bottom:14px;">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+            <span style="font-size:11px; font-weight:800; background:#F59E0B; color:#111; padding:3px 10px; border-radius:12px;">
+              🤖 ANDROID (.APK OFFICIEL)
+            </span>
+            <span style="font-size:11px; color:#92400e; font-weight:700;">~6 Mo • Téléchargement direct</span>
+          </div>
+          <h4 style="font-size:15px; font-weight:800; color:#111; margin:6px 0 4px;">
+            📦 Option 1 : Télécharger et installer le fichier Android (.APK)
+          </h4>
+          <p style="font-size:12px; color:#4b5563; margin-bottom:12px; line-height:1.45;">
+            Téléchargez directement le fichier <strong>Marche-dAujourdhui.apk</strong> sur votre téléphone Android puis ouvrez-le pour installer l'application complète.
+          </p>
+          <button type="button" onclick="downloadAndroidApk()" style="width:100%; padding:13px 16px; background:#F59E0B; color:#111827; border:none; border-radius:12px; font-size:14px; font-weight:900; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:8px;">
+            📥 Télécharger l'application Android (.APK)
+          </button>
+
+          <div id="apk-install-steps" style="margin-top:12px; background:white; border:1px solid #fde68a; border-radius:10px; padding:12px; font-size:12px; color:#333; line-height:1.55;">
+            <div style="font-weight:800; color:#b45309; margin-bottom:6px;">📋 Comment installer après le téléchargement :</div>
+            <div>1️⃣ Appuyez sur <strong>Ouvrir</strong> dès que le fichier <em>Marche-dAujourdhui.apk</em> est téléchargé.</div>
+            <div style="margin-top:4px;">2️⃣ Si votre téléphone demande une autorisation, activez <strong>« Autoriser depuis cette source »</strong> puis appuyez sur <strong>Installer</strong>.</div>
+            <div style="margin-top:4px;">3️⃣ Si Play Protect affiche un message, appuyez sur <strong>« Plus de détails »</strong> puis <strong>« Installer quand même »</strong>.</div>
+          </div>
+        </div>
+
+        <!-- OPTION 2 : INSTALLATION DIRECTE SUR L'ÉCRAN D'ACCUEIL (ANDROID & iPHONE) -->
+        <div style="background:#f0fdf4; border:2px solid #1A6B3C; border-radius:16px; padding:16px; margin-bottom:14px;">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+            <span style="font-size:11px; font-weight:800; background:#1A6B3C; color:white; padding:3px 10px; border-radius:12px;">
+              ⚡ ANDROID & iPHONE (SANS BLOCAGE)
+            </span>
+            <span style="font-size:11px; color:#166534; font-weight:700;">1 Clic • Rapide</span>
+          </div>
+          <h4 style="font-size:15px; font-weight:800; color:#111; margin:6px 0 4px;">
+            📲 Option 2 : Ajouter directement sur l'écran d'accueil
+          </h4>
+          <p style="font-size:12px; color:#4b5563; margin-bottom:12px; line-height:1.45;">
+            Compatible <strong>iPhone (iOS)</strong> et <strong>Android</strong> sans aucun message d'avertissement.
+          </p>
+          <button type="button" onclick="triggerOneClickWebInstall()" style="width:100%; padding:13px 16px; background:#1A6B3C; color:white; border:none; border-radius:12px; font-size:14px; font-weight:800; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:8px;">
+            ⚡ Installer sur mon écran d'accueil
+          </button>
+          <div id="pwa-install-steps" style="display:none; margin-top:12px; background:white; border:1px solid #bbf7d0; border-radius:10px; padding:12px; font-size:12px; color:#333; line-height:1.55;"></div>
+        </div>
+
+        <!-- PARTAGER SUR WHATSAPP -->
+        <button type="button" onclick="shareAppOnWhatsApp()" style="width:100%; padding:12px 14px; background:#25D366; color:white; border:none; border-radius:12px; font-size:13px; font-weight:800; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:8px;">
+          💬 Envoyer le lien de téléchargement sur WhatsApp
+        </button>
+      </div>
+    </div>
+  </div>
 </body>
 </html>
