@@ -1650,11 +1650,11 @@
           { data: ordersData }
         ] = await Promise.all([
           sb.from('products').select('*').eq('is_active', true).order('created_at', { ascending: false }),
-          sb.from('vendors').select('id, full_name, plan, subscription_plan, city, phone'),
-          sb.from('profiles').select('id, full_name, phone, city, bio, avatar_url'),
+          sb.from('vendors').select('*'),
+          sb.from('profiles').select('*'),
           sb.from('reviews').select('*').order('created_at', { ascending: false }),
           sb.from('favorites').select('product_id'),
-          sb.from('orders').select('id, product_id, items')
+          sb.from('orders').select('*')
         ]);
 
         vendorMap = {};
