@@ -1331,7 +1331,15 @@
     // Utilitaires boutique & avis (identiques à shopUtils.js)
     function isSystemComment(comment) {
       if (!comment || typeof comment !== 'string') return false;
-      return comment.startsWith(BANNER_PREFIX) || comment.startsWith(REPORT_PREFIX);
+      return (
+        comment.startsWith(BANNER_PREFIX) ||
+        comment.startsWith(REPORT_PREFIX) ||
+        comment.startsWith('__REFERRAL__:') ||
+        comment.startsWith('__SHOP_SYNC_V1__:') ||
+        comment.startsWith('__NOTIF_V1__:') ||
+        comment.startsWith('__PLAN_ACTIVE_V1__:') ||
+        comment.startsWith('__POS_SYS_V1__:')
+      );
     }
 
     function parseShopInfo(profile, vendor) {
@@ -1460,18 +1468,76 @@
       });
     }
 
+    function normalizeWebPlanSlug(rawPlan, planId = null, paymentMethod = null, amount = null) {
+      const s = String(rawPlan || '').trim().toLowerCase();
+      if (s === 'premium' || s.includes('premium') || s === '4') return 'premium';
+      if (s === 'gold' || s.includes('gold') || s === '3') return 'gold';
+      if (s === 'bronze' || s.includes('bronze') || s === '2') return 'bronze';
+      if (s === 'basic' || s.includes('basic') || s === 'promo') return 'basic';
+      const pid = String(planId || '').trim().toLowerCase();
+      if (pid === '4') return 'premium';
+      if (pid === '3') return 'gold';
+      if (pid === '2') return 'bronze';
+      if (pid === '1' && String(paymentMethod || '').toLowerCase() !== 'free') return 'basic';
+      const numAmount = Number(amount || 0);
+      if (numAmount >= 10000) return 'premium';
+      if (numAmount >= 5000) return 'gold';
+      if (numAmount >= 2000) return 'bronze';
+      if (numAmount >= 500 && String(paymentMethod || '').toLowerCase() !== 'free') return 'basic';
+      return 'gratuit';
+    }
+
     async function fetchCurrentProfile() {
       if (!currentUser) return;
-      const [{ data: prof }, { data: vend }, { data: favs }] = await Promise.all([
-        sb.from('profiles').select('*').eq('id', currentUser.id).single(),
-        sb.from('vendors').select('*').eq('id', currentUser.id).single(),
-        sb.from('favorites').select('product_id').eq('user_id', currentUser.id)
+      const [{ data: prof }, { data: vend }, { data: favs }, { data: subs }, { data: planRevs }] = await Promise.all([
+        sb.from('profiles').select('*').eq('id', currentUser.id).maybeSingle(),
+        sb.from('vendors').select('*').eq('id', currentUser.id).maybeSingle(),
+        sb.from('favorites').select('product_id').eq('user_id', currentUser.id),
+        sb.from('user_subscriptions').select('*').eq('user_id', currentUser.id).order('created_at', { ascending: false }),
+        sb.from('reviews').select('vendor_id, comment').like('comment', '__PLAN_ACTIVE_V1__:%').order('created_at', { ascending: false }).limit(50)
       ]);
       myFavoriteIds = (favs || []).map(f => f.product_id);
+
+      const candidates = [
+        normalizeWebPlanSlug(vend?.plan || vend?.subscription_plan),
+        normalizeWebPlanSlug(prof?.subscription_tier || prof?.plan)
+      ];
+      (subs || []).forEach(sub => {
+        if (String(sub.status || '').toLowerCase() === 'active') {
+          let meta = null;
+          if (sub.reference_number && sub.reference_number.trim().startsWith('{')) {
+            try { meta = JSON.parse(sub.reference_number); } catch (e) {}
+          }
+          if (!meta || meta.type !== 'boost') {
+            candidates.push(normalizeWebPlanSlug(meta?.planSlug || meta?.planName, meta?.planId || sub.plan_id, sub.payment_method, meta?.amount));
+          }
+        }
+      });
+      (planRevs || []).forEach(r => {
+        try {
+          const parsed = JSON.parse(r.comment.slice('__PLAN_ACTIVE_V1__:'.length));
+          if (String(parsed.userId || r.vendor_id) === String(currentUser.id)) {
+            candidates.push(normalizeWebPlanSlug(parsed.planSlug || parsed.planName, parsed.planId, 'manual', parsed.amount));
+          }
+        } catch (e) {}
+      });
+
+      const ranks = { gratuit: 0, basic: 1, bronze: 2, gold: 3, premium: 4 };
+      let bestPlan = 'gratuit';
+      let bestRank = 0;
+      candidates.forEach(c => {
+        const rank = ranks[c] || 0;
+        if (rank > bestRank) {
+          bestRank = rank;
+          bestPlan = c;
+        }
+      });
+
       currentProfile = {
         ...(prof || {}),
+        role: bestPlan !== 'gratuit' && (!prof?.role || prof.role === 'client') ? 'vendeur' : (prof?.role || 'client'),
         vendorData: vend || null,
-        vendorPlan: vend?.plan || prof?.subscription_tier || 'gratuit'
+        vendorPlan: bestPlan
       };
     }
 
