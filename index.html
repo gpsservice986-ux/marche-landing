@@ -1401,6 +1401,18 @@
         setTimeout(() => openProductDetailModal(sharedProdId), 500);
       }
 
+      // Capturer le code d'invitation/parrainage ?ref=...
+      const refParam = urlParams.get('ref') || urlParams.get('REF') || urlParams.get('referral');
+      if (refParam && refParam.trim()) {
+        const cleanRef = refParam.trim().toUpperCase();
+        try { localStorage.setItem('pendingReferralCode', cleanRef); } catch (e) {}
+        if (!currentUser) {
+          setTimeout(() => {
+            openAuthModal(`🎁 Vous avez été invité(e) sur Marché d'Aujourd'hui (${cleanRef}) ! Créez votre compte gratuitement pour continuer.`, 'client');
+          }, 700);
+        }
+      }
+
       sb.channel('public-products-sync')
         .on('postgres_changes', { event: '*', schema: 'public', table: 'products' }, () => {
           loadMarketplaceData();
@@ -2432,13 +2444,15 @@
           currentUser = data.user;
 
           if (currentUser) {
+            const generatedRefCode = 'REF-' + currentUser.id.substring(0, 8).toUpperCase();
             await sb.from('profiles').upsert({
               id: currentUser.id,
               full_name: fullName,
               email,
               phone,
               role,
-              subscription_tier: 'gratuit'
+              subscription_tier: 'gratuit',
+              referral_code: generatedRefCode
             });
             if (role === 'vendeur' || role === 'prestataire') {
               await sb.from('vendors').upsert({
@@ -2451,6 +2465,76 @@
                 plan: 'gratuit',
                 is_active: true
               });
+            }
+
+            // Traiter le parrainage si lien d'invitation utilisé
+            const storedRefCode = (localStorage.getItem('pendingReferralCode') || '').trim().toUpperCase();
+            if (storedRefCode) {
+              try {
+                let { data: referrerProfile } = await sb
+                  .from('profiles')
+                  .select('id, full_name, role, subscription_tier, referral_code')
+                  .ilike('referral_code', storedRefCode)
+                  .maybeSingle();
+
+                if (!referrerProfile && storedRefCode.startsWith('REF-')) {
+                  const idPrefix = storedRefCode.slice(4).toLowerCase();
+                  const { data: allProfs } = await sb.from('profiles').select('id, full_name, role, subscription_tier, referral_code');
+                  referrerProfile = (allProfs || []).find(p => p.id && p.id.toLowerCase().startsWith(idPrefix)) || null;
+                }
+
+                if (!referrerProfile) {
+                  const { data: regAdmin } = await sb.from('regional_admins').select('*').ilike('referral_code', storedRefCode).maybeSingle();
+                  if (regAdmin) {
+                    referrerProfile = { id: regAdmin.user_id, full_name: regAdmin.full_name, role: 'regional_admin' };
+                  }
+                }
+
+                if (referrerProfile?.id && referrerProfile.id !== currentUser.id) {
+                  // Sauvegarder dans la table referrals
+                  await sb.from('referrals').insert({
+                    referrer_code: storedRefCode,
+                    referred_id: currentUser.id,
+                    status: 'valid'
+                  }).catch(() => {});
+
+                  // Sauvegarder dans reviews (__REFERRAL__:)
+                  const refPayload = {
+                    referrerId: referrerProfile.id,
+                    referrerCode: storedRefCode,
+                    referredId: currentUser.id,
+                    referredName: fullName,
+                    referredEmail: email,
+                    referredRole: role
+                  };
+                  await sb.from('reviews').insert({
+                    vendor_id: referrerProfile.id,
+                    reviewer_id: referrerProfile.id,
+                    rating: 5,
+                    comment: '__REFERRAL__:' + JSON.stringify(refPayload)
+                  });
+
+                  // Notifier le parrain
+                  const notifPayload = {
+                    user_id: referrerProfile.id,
+                    title: '🎉 Félicitations ! Nouvelle inscription via votre lien',
+                    message: `Félicitations ! ${fullName} vient de s'inscrire via votre lien d'invitation. Votre compteur a été mis à jour !`,
+                    type: 'referral',
+                    is_read: false,
+                    created_at: new Date().toISOString()
+                  };
+                  await sb.from('reviews').insert({
+                    vendor_id: referrerProfile.id,
+                    reviewer_id: referrerProfile.id,
+                    rating: 5,
+                    comment: `__NOTIF_V1__:${referrerProfile.id}:${JSON.stringify(notifPayload)}`
+                  });
+                }
+              } catch (e) {
+                console.warn('Erreur parrainage landing:', e);
+              } finally {
+                localStorage.removeItem('pendingReferralCode');
+              }
             }
           }
         }
