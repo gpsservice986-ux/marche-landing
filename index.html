@@ -1131,6 +1131,10 @@
               <option value="prestataire">🔧 Prestataire de services</option>
             </select>
           </div>
+          <div class="form-group">
+            <label>🎁 Code d'invitation / Parrain (facultatif)</label>
+            <input type="text" id="auth-referral-code" class="form-input" placeholder="Ex: REF-5B522F82" style="text-transform:uppercase;" />
+          </div>
         </div>
 
         <div class="form-group">
@@ -1371,6 +1375,9 @@
       if (digits.startsWith('00')) digits = digits.slice(2);
       if (digits.length === 8) return '22901' + digits;
       if (digits.length === 10 && digits.startsWith('01')) return '229' + digits;
+      if (digits.length === 11 && digits.startsWith('229') && !digits.startsWith('22901')) {
+        return '22901' + digits.slice(3);
+      }
       return digits;
     }
 
@@ -1408,7 +1415,7 @@
         try { localStorage.setItem('pendingReferralCode', cleanRef); } catch (e) {}
         if (!currentUser) {
           setTimeout(() => {
-            openAuthModal(`🎁 Vous avez été invité(e) sur Marché d'Aujourd'hui (${cleanRef}) ! Créez votre compte gratuitement pour continuer.`, 'client');
+            openAuthModal(`🎁 Vous avez été invité(e) sur Marché d'Aujourd'hui (${cleanRef}) ! Créez votre compte gratuitement pour continuer.`, 'client', 'register');
           }, 700);
         }
       }
@@ -1490,12 +1497,12 @@
       if (pid === '4') return 'premium';
       if (pid === '3') return 'gold';
       if (pid === '2') return 'bronze';
-      if (pid === '1' && String(paymentMethod || '').toLowerCase() !== 'free') return 'basic';
+      if (pid === '1') return 'basic';
       const numAmount = Number(amount || 0);
       if (numAmount >= 10000) return 'premium';
       if (numAmount >= 5000) return 'gold';
       if (numAmount >= 2000) return 'bronze';
-      if (numAmount >= 500 && String(paymentMethod || '').toLowerCase() !== 'free') return 'basic';
+      if (numAmount >= 500) return 'basic';
       return 'gratuit';
     }
 
@@ -1735,9 +1742,9 @@
           const pr = profileMap[p.vendor_id] || {};
           const shop = parseShopInfo(pr, v);
           const vPlan = (v.plan || v.subscription_plan || 'gratuit').toLowerCase();
-          const isPaidPlan = ['bronze', 'gold', 'premium'].includes(vPlan);
+          const isPaidPlan = ['basic', 'bronze', 'gold', 'premium'].includes(vPlan);
           const isSponsored = Boolean(p.is_boosted || isPaidPlan);
-          const planPriority = vPlan === 'premium' ? 4 : vPlan === 'gold' ? 3 : vPlan === 'bronze' ? 2 : 1;
+          const planPriority = vPlan === 'premium' ? 4 : vPlan === 'gold' ? 3 : vPlan === 'bronze' ? 2 : vPlan === 'basic' ? 1 : 0;
           return {
             ...p,
             vendorName: shop.displayName || v.full_name || pr.full_name || 'Vendeur',
@@ -1918,8 +1925,13 @@
           ctx.fillStyle = '#ffffff';
           ctx.fillText('👆 Cliquez sur le lien du message pour voir ce produit en direct !', 300, 684);
 
-          const dataUrl = canvas.toDataURL('image/png');
-          canvas.toBlob((blob) => resolve({ dataUrl, blob }), 'image/png');
+          let dataUrl = '';
+          try {
+            dataUrl = canvas.toDataURL('image/png');
+            canvas.toBlob((blob) => resolve({ dataUrl, blob }), 'image/png');
+          } catch (e) {
+            resolve({ dataUrl: null, blob: null });
+          }
         };
 
         ctx.fillStyle = '#ffffff';
@@ -2372,7 +2384,7 @@
             is_read: false
           }));
           if (notifs.length > 0) {
-            await sb.from('notifications').insert(notifs);
+            try { await sb.from('notifications').insert(notifs); } catch (e) {}
           }
         }
 
@@ -2387,7 +2399,7 @@
     }
 
     // ================= AUTHENTIFICATION =================
-    function openAuthModal(noticeText = '', defaultRole = 'client') {
+    function openAuthModal(noticeText = '', defaultRole = 'client', defaultMode = null) {
       const notice = document.getElementById('auth-context-notice');
       if (noticeText) {
         notice.style.display = 'block';
@@ -2397,6 +2409,15 @@
       }
       document.getElementById('auth-role').value = defaultRole;
       document.getElementById('auth-error').style.display = 'none';
+      const refInput = document.getElementById('auth-referral-code');
+      if (refInput) {
+        refInput.value = localStorage.getItem('pendingReferralCode') || '';
+      }
+      if (defaultMode) {
+        switchAuthTab(defaultMode);
+      } else if (noticeText && (noticeText.includes('invité') || noticeText.includes('Créez votre compte'))) {
+        switchAuthTab('register');
+      }
       document.getElementById('auth-modal').classList.add('open');
     }
 
@@ -2467,8 +2488,9 @@
               });
             }
 
-            // Traiter le parrainage si lien d'invitation utilisé
-            const storedRefCode = (localStorage.getItem('pendingReferralCode') || '').trim().toUpperCase();
+            // Traiter le parrainage si lien d'invitation utilisé ou code renseigné
+            const enteredRef = (document.getElementById('auth-referral-code')?.value || '').trim().toUpperCase();
+            const storedRefCode = (enteredRef || localStorage.getItem('pendingReferralCode') || '').trim().toUpperCase();
             if (storedRefCode) {
               try {
                 let { data: referrerProfile } = await sb
@@ -2597,8 +2619,8 @@
           .from('conversations')
           .select('*')
           .eq('product_id', product.id)
-          .eq('participant_1', currentUser.id)
-          .single();
+          .or(`participant_1.eq.${currentUser.id},participant_2.eq.${currentUser.id}`)
+          .maybeSingle();
 
         if (!existing) {
           const welcomeMsg = `Bonjour, j'ai vu votre produit "${product.name}" (${Number(product.price).toLocaleString()} FCFA) sur Marché Bénin Connect. Est-il disponible ?`;
@@ -2612,7 +2634,7 @@
               last_message_at: new Date().toISOString()
             })
             .select()
-            .single();
+            .maybeSingle();
 
           if (!convErr && newConv) {
             existing = newConv;
@@ -2623,13 +2645,21 @@
               is_read: false
             });
 
-            await sb.from('notifications').insert({
+            const msgPayload = {
               user_id: product.vendor_id,
               title: '💬 Nouveau message client !',
               message: `Un client vous a écrit à propos de "${product.name}" depuis Marché Bénin Connect.`,
               type: 'message',
-              is_read: false
-            });
+              is_read: false,
+              created_at: new Date().toISOString()
+            };
+            await sb.from('notifications').insert(msgPayload).catch(() => {});
+            await sb.from('reviews').insert({
+              vendor_id: product.vendor_id,
+              reviewer_id: product.vendor_id,
+              rating: 5,
+              comment: `__NOTIF_V1__:${product.vendor_id}:${JSON.stringify(msgPayload)}`
+            }).catch(() => {});
           }
         }
 
@@ -2750,13 +2780,21 @@
         }).eq('id', activeConversation.id);
 
         if (activeConversation.otherUserId) {
-          await sb.from('notifications').insert({
+          const chatNotif = {
             user_id: activeConversation.otherUserId,
             title: `💬 Nouveau message (${activeConversation.prodName})`,
             message: content,
             type: 'message',
-            is_read: false
-          });
+            is_read: false,
+            created_at: new Date().toISOString()
+          };
+          await sb.from('notifications').insert(chatNotif).catch(() => {});
+          await sb.from('reviews').insert({
+            vendor_id: activeConversation.otherUserId,
+            reviewer_id: activeConversation.otherUserId,
+            rating: 5,
+            comment: `__NOTIF_V1__:${activeConversation.otherUserId}:${JSON.stringify(chatNotif)}`
+          }).catch(() => {});
         }
       }
     }
@@ -3131,7 +3169,7 @@
             <span style="font-size:11px; font-weight:800; background:#F59E0B; color:#111; padding:3px 10px; border-radius:12px;">
               🤖 ANDROID (.APK OFFICIEL)
             </span>
-            <span style="font-size:11px; color:#92400e; font-weight:700;">~6 Mo • Téléchargement direct</span>
+            <span style="font-size:11px; color:#92400e; font-weight:700;">~27 Mo • Téléchargement direct</span>
           </div>
           <h4 style="font-size:15px; font-weight:800; color:#111; margin:6px 0 4px;">
             📦 Option 1 : Télécharger et installer le fichier Android (.APK)
