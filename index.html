@@ -1404,27 +1404,34 @@
 
     // Initialisation au chargement
     window.addEventListener('DOMContentLoaded', async () => {
+      // Redirection IMMÉDIATE vers la page d'inscription si un lien de parrainage (?ref=...) est cliqué
+      const urlParams = new URLSearchParams(window.location.search);
+      const refParam = urlParams.get('ref') || urlParams.get('REF') || urlParams.get('code') || urlParams.get('referral');
+      if (refParam && refParam.trim()) {
+        const cleanRef = refParam.trim().toUpperCase();
+        window.location.replace(
+          'https://marche-app.onrender.com/?mode=signup&ref=' + encodeURIComponent(cleanRef)
+        );
+        return;
+      }
+
+      // Aucun ?ref= dans l'URL : purger tout ancien code fantôme en cache (ex: ancien test Koffi)
+      try {
+        localStorage.removeItem('pendingReferralCode');
+        localStorage.removeItem('bc_pending_ref_code');
+        localStorage.removeItem('pendingReferralCodeAt');
+        document.cookie = 'bc_jds_ref_code=; Path=/; Max-Age=0';
+        document.cookie = 'bc_jds_ref_code=; Domain=.benin-connect.com; Path=/; Max-Age=0';
+      } catch (e) {}
+
       startBannerCarousel();
       await checkSession();
       await loadMarketplaceData();
 
       // Ouvrir un produit partagé en paramètre ?product=ID
-      const urlParams = new URLSearchParams(window.location.search);
       const sharedProdId = urlParams.get('product');
       if (sharedProdId) {
         setTimeout(() => openProductDetailModal(sharedProdId), 500);
-      }
-
-      // Capturer le code d'invitation/parrainage ?ref=...
-      const refParam = urlParams.get('ref') || urlParams.get('REF') || urlParams.get('referral');
-      if (refParam && refParam.trim()) {
-        const cleanRef = refParam.trim().toUpperCase();
-        try { localStorage.setItem('pendingReferralCode', cleanRef); } catch (e) {}
-        if (!currentUser) {
-          setTimeout(() => {
-            openAuthModal(`🎁 Vous avez été invité(e) sur Marché d'Aujourd'hui (${cleanRef}) ! Créez votre compte gratuitement pour continuer.`, 'client', 'register');
-          }, 700);
-        }
       }
 
       sb.channel('public-products-sync')
@@ -2408,9 +2415,8 @@
     // ================= AUTHENTIFICATION =================
     function redirectToRegisterApp() {
       try {
-        const pendingRef = localStorage.getItem('pendingReferralCode') || '';
         const urlParams = new URLSearchParams(window.location.search);
-        const ref = urlParams.get('ref') || pendingRef;
+        const ref = (urlParams.get('ref') || urlParams.get('REF') || urlParams.get('code') || urlParams.get('referral') || '').trim().toUpperCase();
         const targetUrl = new URL('https://marche-app.onrender.com/');
         targetUrl.searchParams.set('mode', 'signup');
         if (ref) {
